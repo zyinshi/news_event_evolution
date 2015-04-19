@@ -19,6 +19,7 @@ On working...
   - represent graph: terms and co-occurence
     - separated or unique?
     - same node or similarity link?
+    - sentence level : doc level
   - extract event
     - community detection?
     - slow?
