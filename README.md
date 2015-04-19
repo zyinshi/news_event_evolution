@@ -4,10 +4,11 @@ Event evolution detection based on Graph network model
 On working...
 
 ### -------------check list-----------------
-* <del> Get Data corpus </del>
+* <del> Get Data corpus 
   - resource 
   - crawl url
   - format problem? clean html
+  </del>
 
 * Import and text preprocessing
   - <del> Stanford Parser - named entity</del>
