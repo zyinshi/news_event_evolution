@@ -4,15 +4,15 @@ Event evolution detection based on Graph network model
 On working...
 
 ### -------------check list-----------------
-* Get Data corpus
-  - resource
+* <del> Get Data corpus </del>
+  - resource 
   - crawl url
   - format problem? clean html
 
 * Import and text preprocessing
-  - Stanford Parser - named entity
-  - or Lucene?
-  - How to get key words?
+  - <del> Stanford Parser - named entity</del>
+  - <del> or Lucene? </del>
+  - How to get key words? noun : name : verb
 
 * Extract event in time window
   - how long?
@@ -21,8 +21,8 @@ On working...
     - same node or similarity link?
     - sentence level : doc level
   - extract event
-    - community detection?
-    - slow?
+    - <del> community detection? </del>
+    - <del> slow? </del>
     - hierarchy?
   - how to measure quantitively
 
