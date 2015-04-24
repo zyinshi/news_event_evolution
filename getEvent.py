@@ -29,13 +29,33 @@ def loadGraph(docFile, senFile, alpha, beta):
 		fi = csv.reader(inf , skipinitialspace=True)
 		for l in fi:
 			if not l[1][0].isalnum() or not l[2][0].isalnum(): continue
-			Gd[(l[0],l[1])][(l[0],l[2])]['weight'] += alpha * float(l[3])
+			# Gd[(l[0],l[1])][(l[0],l[2])]['weight'] += alpha * float(l[3])
+			Gd[(l[0],l[1])][(l[0],l[2])]['weight'] *= (float(l[3])+1) #if sen co, heavier weight for that edge (x 1.)
 	
 	for node in Gd.nodes():
 		ph = node[1]
 		for target in Gd.nodes():
 			if target!=node and ph==target[1]:
 				Gd.add_edge(node,target, weight = beta)
+	return Gd
+
+def loadDocGraph(senFile, alpha):	
+	Gd=nx.Graph()    
+	with open(senFile, 'rb') as inf:
+		next(inf, '')
+		fi = csv.reader(inf , skipinitialspace=True)
+		for l in fi:
+			if not l[1][0].isalnum() or not l[2][0].isalnum(): continue
+			Gd.add_node(l[1])
+			Gd.add_node(l[2])
+			Gd.add_edge(l[1],l[2],weight = float(l[3]))
+            
+	with open(senFile, 'rb') as inf:
+		next(inf, '')
+		fi = csv.reader(inf , skipinitialspace=True)
+		for l in fi:
+			if not l[1][0].isalnum() or not l[2][0].isalnum(): continue
+			Gd[l[1]][l[2]]['weight'] += alpha * float(l[3])
 	return Gd
 
 def loadSenGraph(senFile, alpha):	
@@ -173,7 +193,42 @@ def matchStory(stories, target, tau):
 		u = stories['doc_set'][match_ind].union(target['doc_set'][i])
 		stories['doc_set'][match_ind] = u
 	
-	
+def computeDistance(g1, g2):
+    nmatch = 0
+    for ed in g1.edges():
+        end1, end2 = ed[0], ed[1]
+#         if  ed[0] in g2 and ed[1] in g2: print [e for e in nx.all_neighbors(g2,ed[0])],ed[1], ed[1] in [e for e in nx.all_neighbors(g2,ed[0])], ed in g2.edges()
+        if ed in g2.edges():
+            nmatch += min(g1[ed[0]][ed[1]]['weight'],g2[ed[0]][ed[1]]['weight']) 
+    nsize = g1.size(weight = 'weight') + g2.size(weight = 'weight')
+    if nsize==0.0: return 0
+    return float(nmatch)/float(nsize)	
+
+def matchStorybySenEdge(stories, target, tau):
+	day2 = copy.deepcopy(stories['keywords_set'])
+	day1 = copy.deepcopy(target['keywords_set'])
+
+	subgs1 = []
+	for sto in day1:
+	    subgs1.append(nx.subgraph(Gs1, sto))
+	subgs2 = []
+	for sto in day2:
+	    subgs2.append(nx.subgraph(Gs2, sto))
+
+	matched = []
+	for i in range(len(subgs1)):
+	    matchingGraph = subgs1[i]
+	    dis = []
+	    for cand in subgs2:
+	        val = computeDistance(matchingGraph, cand)
+	        dis.append(val)
+	    ma = np.max(dis)
+	    print ma
+	    if ma > 0.01:
+	        ind = np.argmax(dis)
+	        matched.append((all_res[0]['doc_set'][i],all_res[1]['doc_set'][ind]))
+	    else:
+	        matched.append("NONE")
 
 def main():
 	doc_files = glob.glob("/Users/zys/project/testDoc_dup_*.csv")
