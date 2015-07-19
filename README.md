@@ -4,35 +4,32 @@ Event evolution detection based on Graph network model
 On working...
 
 ### -------------check list-----------------
-* <del> Get Data corpus 
+* Get Data corpus 
   - resource 
   - crawl url
   - format problem? clean html
-  </del>
 
 * Import and text preprocessing
-  - <del> Stanford Parser - named entity</del>
-  - <del> or Lucene? </del>
-  - How to get key words? noun : name : verb
+  - Stanford Parser - named entity, cvalue terms
+  - How to get key words? noun : name :<del> verb </del>
 
 * Extract event in time window
-  - how long?
   - represent graph: terms and co-occurence
-    - separated or unique?
-    - same node or similarity link?
-    - sentence level : doc level
+    - same node or similarity link? link 
+    - sentence level : doc level? both
   - extract event
-    - <del> community detection? </del>
-    - <del> slow? </del>
-    - hierarchy?
-  - how to measure quantitively
+    - community detection? louvain
+    - **slow?**
+    - hierarchy? iteratively
+  - **how to measure quantitively**
 
 * Evolution story
-  - iteratively
-  - similarity and merge? term level : graph comparison: "distance"
-  - window size?
-  - how to measure
+  - incrementally within window
+  - similarity and merge? term level :<del> graph comparison: "distance" </del>
+  - window size? depends
+  - **how to measure**
+  
 * global
   - data size
-  - speed
-  - perfomance measure
+  - **speed**
+  - **perfomance measure**
