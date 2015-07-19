@@ -49,19 +49,21 @@ def add_equivalent(Gd, beta, cvterm):
                 target_docid = target[0]
                 Gd.add_edge(node, target, weight=beta * (1 + jacSim[(docid, target_docid)]))
 
+                if docid in cvterm and target_docid in cvterm and cvterm[docid][target_docid] > 0:
+                    Gd.add_edge(node,target, weight=beta * (1 + jacSim[(docid, target_docid)]))
+                else:
+                    Gd.add_edge(node,target, weight=beta * jacSim[(docid, target_docid)])
 
-# if docid in cvterm and target_docid in cvterm and  cvterm[docid][target_docid] != 0:
-# 					Gd.add_edge(node,target, weight = beta * (1 + jacSim[(docid, target_docid)]) )
-# 				else:
-# 					Gd.add_edge(node,target, weight = beta * jacSim[(docid, target_docid)])
 
-
-def load_doc_graph(dup_doc_files, dup_sen_files, alpha, noise_tau):
+def load_doc_graph(local_files, alpha, noise_tau, noise_edge_tau, weight_tau):
     Gd = nx.Graph()
     term_freq = defaultdict(set)
+#     term_itidf = defaultdict()
 
-    for i in range(len(dup_doc_files)):
-        with open(dup_doc_files[i], 'rb') as inf:
+    for i in range(len(local_files)):
+        dup_doc_files = local_files[i][0]
+        dup_sen_files = local_files[i][1]
+        with open(dup_doc_files, 'rb') as inf:
             next(inf, '')
             fi = csv.reader(inf, skipinitialspace=True)
             for l in fi:
@@ -72,34 +74,44 @@ def load_doc_graph(dup_doc_files, dup_sen_files, alpha, noise_tau):
                 if Gd.has_edge(l[1].lower(), l[2].lower()):
                     Gd[l[1].lower()][l[2].lower()]['weight'] += 1
                 else:
-                    # Gd.add_edge(l[1].lower(), l[2].lower(), weight=float(l[3])/2)  # a,b and b,a
+#                     Gd.add_edge(l[1].lower(), l[2].lower(), weight=float(l[3])/2)  # a,b and b,a
                     Gd.add_edge(l[1].lower(), l[2].lower(), weight=1)
+#                 term_itidf[l[1].lower()] += float(l[3])
+#                 term_itidf[l[2].lower()] += float(l[3])
                 term_freq[l[1].lower()].add(l[0])
                 term_freq[l[2].lower()].add(l[0])
 
-        with open(dup_sen_files[i], 'rb') as inf:
+        with open(dup_sen_files, 'rb') as inf:
             next(inf, '')
             fi = csv.reader(inf, skipinitialspace=True)
             for l in fi:
                 if not l[1][0].isalnum() or not l[2][0].isalnum():
                     continue
                 # Gd[l[1]][l[2]]['weight'] += alpha * float(l[3])
-                Gd[l[1].lower()][l[2].lower()]['weight'] += alpha * float(l[3]) / 2
-
+                Gd[l[1].lower()][l[2].lower()]['weight'] += alpha * float(l[3])/2
     # compute edge weight
     # w = d_ab * s_ab / (d_a * d_b)
-    noises = set(k for k, v in term_freq.iteritems() if len(v) < noise_tau)  # prune
+    noises = set(k for k, v in term_freq.iteritems() if len(v) < noise_tau) # prune
     Gd.remove_nodes_from(noises)
-    #     print term_freq['democratic south bend mayor pete buttigieg'],Gd['democratic south bend mayor pete buttigieg']
+    for e in Gd.edges(data=True):
+#         print e[2]['weight']
+        if e[2]['weight'] < noise_edge_tau:
+            Gd.remove_edge(e[0], e[1])
+    small_deg = [node for node, degree in Gd.degree().items() if degree < 3]
+    Gd.remove_nodes_from(small_deg)
+
     for u, v, d in Gd.edges(data=True):
         d['weight'] = float(d['weight']) / (len(term_freq[u]) * len(term_freq[v]))
-
+#         print u,v,d
+#         print d['weight']
+        if d['weight'] < weight_tau:
+            Gd.remove_edge(u, v)
     return Gd
 
 
-def load_sen_graph(senFile):
+def load_sen_graph(sen_file):
     Gd = nx.Graph()
-    with open(senFile, 'rb') as inf:
+    with open(sen_file, 'rb') as inf:
         next(inf, '')
         fi = csv.reader(inf, skipinitialspace=True)
         for l in fi:
@@ -112,9 +124,9 @@ def load_sen_graph(senFile):
     return Gd
 
 
-def load_cv_graph(cvFile, beta):
+def load_cv_graph(cv_file, beta):
     G = nx.Graph()
-    with open(cvFile, 'rb') as inf:
+    with open(cv_file, 'rb') as inf:
         next(inf, '')
         fi = csv.reader(inf, skipinitialspace=True)
         for l in fi:

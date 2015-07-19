@@ -13,6 +13,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import copy
 import py2neo as pn
+import time
 
 
 def query_related_text(db_graph, node, target):
@@ -69,25 +70,80 @@ def get_list(partition):
     return result
 
 
-def refine_cluster(G, db_graph, tau):
-    nodes = G.nodes()
+def refine_cluster(c, orig, tau, db_graph):
+    nodes = c.nodes()
+    # print c.number_of_nodes()
 #     tfidf = TfidfVectorizer(tokenizer=tokenize, stop_words='english')
     for i in range(len(nodes)):
         node = nodes[i]
         doc_id, ph = node[0], node[1]
         for j in range(i+1, len(nodes)):
             target = nodes[j]
-            if target!=node and ph==target[1]:
+            if target != node and ph == target[1]:
+                if not orig.has_edge(node, target):
+                    continue
                 sentences1, sentences2 = query_related_text(db_graph, node, target)
                 sen_sim = sentense_sim(sentences1, sentences2, node[1], target[1])
-                print node, target, sen_sim
+                # print node, target, sen_sim
 
-                if  sen_sim <= tau:
+                if sen_sim <= tau:
                     print "removed: ", node, target
-                    G.remove_edge(node, target)
+                    orig.remove_edge(node, target)
 
 
-def get_partition(G, db_graph, tau, lam, mode=1): # mode{1: depends on threshold 2: highest level}
+def refine_sub_cluster(c, db_graph, tau):
+    nodes = c.nodes()
+    # print c.number_of_nodes()
+#     tfidf = TfidfVectorizer(tokenizer=tokenize, stop_words='english')
+    for i in range(len(nodes)):
+        node = nodes[i]
+        doc_id, ph = node[0], node[1]
+        for j in range(i+1, len(nodes)):
+            target = nodes[j]
+            if target != node and ph == target[1]:
+                if not c.has_edge(node, target):
+                    continue
+                sentences1, sentences2 = query_related_text(db_graph, node, target)
+                sen_sim = sentense_sim(sentences1, sentences2, node[1], target[1])
+                # print node, target, sen_sim
+
+                if sen_sim <= tau:
+                    # print "removed: ", node, target
+                    c.remove_edge(node, target)
+
+
+def get_partition(G, db_graph, tau):
+    iter = 0
+    oldmod = 0
+    refined_G = copy.deepcopy(G)
+
+    while iter < 10:
+        iter += 1
+        partition = community.best_partition(refined_G)
+        mod = community.modularity(partition, refined_G)
+        print oldmod, mod
+        if mod <= oldmod:
+            break
+
+        oldmod = mod
+        result = get_list(partition)
+        coms = []
+        for sub in result:
+            H = refined_G.subgraph(sub)
+            coms.append(H)
+
+        print iter, ": Detected ", len(coms), " communities."
+
+        for c in coms:
+            refine_cluster(c, refined_G, tau, db_graph)
+
+    print "Detected ", len(result), " communities in total on further sub partition"
+    return result
+
+
+
+def get_partition_by_cc(G, db_graph, tau):
+    start = time.time()
     partition = community.best_partition(G)
     result = get_list(partition)
     coms = []
@@ -95,28 +151,18 @@ def get_partition(G, db_graph, tau, lam, mode=1): # mode{1: depends on threshold
         H = G.subgraph(sub)
         coms.append(H)
     print "Detected ", len(coms), " communities."
-
-    if mode==2:
-        print "Detected ", len(coms), " communities on best partition"
-        return result
+    print("--- --- 1 pass event match: %s seconds ---" % (time.time() - start))
 
     # Further division
     newPar = coms
     level = 0
-    while(level<1):
+    while level < 1:
         oldPar = copy.deepcopy(newPar)
         newRes = []
         for c in oldPar:
-            refine_cluster(c, db_graph, 0.5)
-# 			best = community.best_partition(c)
-# 			mod = community.modularity(best, c)
-# 			print mod
-
-# 			if mod >= tau:
-# 				sublist = get_list(best)
-# 				newRes.extend(sublist)
-# 			else:
-# 				newRes.append(c.nodes())
+            start = time.time()
+            refine_sub_cluster(c, db_graph, tau)
+            print("--- --- cluster refine: %s seconds ---" % (time.time() - start))
             sublist = nx.connected_components(c)
             newRes.extend(sublist)
 
@@ -125,9 +171,8 @@ def get_partition(G, db_graph, tau, lam, mode=1): # mode{1: depends on threshold
             H = G.subgraph(sub)
             newPar.append(H)
         level += 1
-        tau -= level * lam
-        print len(oldPar), len(newPar)
-        if len(oldPar)==len(newPar): break
+
+        if len(oldPar) == len(newPar): break
 
     print "Detected ", len(newRes), " communities in total on further sub partition"
     return newRes
@@ -138,19 +183,21 @@ def create_event_nodes(db_graph, best_par, doc_list, date_time):
     for i in range(len(best_par)):
         # event = pn.Node("Event", date_time=date_time, eid=i)
         # db_graph.create(event)
-
-        text_statement = "MERGE (e:Event {date_time:{DT}, eid:{I}}) with e " \
-                         "MATCH (n:NameEntityPhraseNode) WHERE LOWER(n.phrase)={PH} and n.documentId=toInt({DID})" \
-                         "MERGE (e)-[r:CONTAIN_KEYWORD]->(n)"
         doc_statement = "MERGE (e:Event {date_time:{DT}, eid:{I}}) with e " \
                         "MATCH (d:Document) WHERE id(d)={DID}" \
                         "MERGE (e)-[r:CONTAIN_DOC]->(d)"
-
+        keywords_list = []
+        doc_list = []
         for nod in best_par[i]:
-            tx.append(text_statement, {"DT": date_time, "I": i, "PH": nod[1], "DID": nod[0]})
+            keywords_list.append(nod[1])
+            doc_list.append(nod[0])
+
         for did in doc_list[i]:
             tx.append(doc_statement, {"DT": date_time, "I": i, "DID": did})
 
+        text_statement = "MATCH (e:Event {date_time:{DT}, eid:{I}})" \
+                         "SET e.keywords={L}"
+        tx.append(text_statement, {"DT": date_time, "I": i, "L": keywords_list})
     tx.process()
     tx.commit()
 

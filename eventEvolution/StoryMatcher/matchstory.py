@@ -5,37 +5,62 @@ import numpy as np
 import copy
 from EventUtil.util import cos_sim
 from itertools import chain
+import math
 # import bottleneck as bn
 import py2neo as pn
 
 
-def create_one_story_node(db_graph, date_time, eid, story_local_index, match_score, next_ind):
-    stat = "MERGE (s:Story {start_date:{DT}, end_date:{DT}, local_index:{SI}}) with s " \
-           "MATCH (e:Event {date_time:{DT}, eid:{I}}), (ls:Story {local_index:{LSI}})" \
-           "MERGE (s)-[:START_EVENT {weight:1}]->(e)" \
-           "MERGE (s)-[:HAS_EVENT {weight:1}]->(e)" \
-           "MERGE (s)-[:SIMILAR {weight:{W}}]->(ls)"
-    db_graph.cypher.execute(stat, {"DT": date_time, "I": eid, "SI": next_ind, "LSI": story_local_index, "W": match_score})
-
-
-def create_initial_story_nodes(db_graph, init_stories, date_time):
+def create_initial_story_nodes(current_window_Gd, db_graph, init_stories, date_time, global_index):
     tx = db_graph.cypher.begin()
-    stat = "MERGE (s:Story {start_date:{DT}, end_date:{DT}, local_index:{I}}) with s " \
+    stat = "MERGE (s:Story {start_date:{DT}, end_date:{DT}, global_index:{I}}) with s " \
            "MATCH (e:Event {date_time:{DT}, eid:{I}}) " \
            "MERGE (s)-[:START_EVENT {weight:1}]->(e)" \
-           "MERGE (s)-[:HAS_EVENT {weight:1}]->(e)"
+           "MERGE (s)-[:HAS_EVENT {weight:1}]->(e) " \
+           "SET e.keywords={L}"
 
     for i in range(len(init_stories)):
         # print i, date_time
-        tx.append(stat, {"DT": date_time, "I": i})
+        keywords_list = nx.subgraph(current_window_Gd, init_stories[i]).nodes()
+        tx.append(stat, {"DT": date_time, "I": i, "L": keywords_list})
+        global_index += 1
+
     tx.process()
     tx.commit()
+    return global_index
 
 
-def link_events_and_story(db_graph, date_time, event_id, story_local_index, match_score, last_event_date):
-    stat = "MATCH (s:Story {local_index:{SI}})-[:HAS_EVENT {weight:{W}}]->(le:Event {date_time:{LDT}}), (e:Event {date_time:{DT}, eid:{I}})" \
-           "MERGE (s)-[r:HAS_EVENT]->(e) MERGE (le)-[:NEXT_EVENT {weight:{W}}]->(e) SET s.end_date = {DT}"
-    db_graph.cypher.execute(stat, {"DT": date_time, "I": event_id, "SI": story_local_index, "LDT": last_event_date, "W": match_score})
+def set_keywords_prop(db_graph, keywords_list, date_time, eid):
+    stat = "MATCH (e:Event {date_time:{DT}, eid:{I}})" \
+           "SET e.keywords={L}"
+    db_graph.cypher.execute(stat, {"DT": date_time, "I": eid, "L": keywords_list})
+
+
+def create_one_story_node(db_graph, date_time, eid, next_ind, match_score, last_event_date, last_event_id):
+    if match_score == 0:
+        stat = "MERGE (s:Story {start_date:{DT}, end_date:{DT}, global_index:{SI}}) with s " \
+               "MATCH (e:Event {date_time:{DT}, eid:{I}})" \
+               "MERGE (s)-[:START_EVENT {weight:1}]->(e)" \
+               "MERGE (s)-[:HAS_EVENT {weight:1}]->(e)"
+    else:
+        stat = "MERGE (s:Story {start_date:{DT}, end_date:{DT}, global_index:{SI}}) with s " \
+               "MATCH (e:Event {date_time:{DT}, eid:{I}}), (ls:Story)-[:HAS_EVENT]->(le:Event {date_time:{LDT}, eid:{LI}})" \
+               "MERGE (s)-[:START_EVENT {weight:1}]->(e)" \
+               "MERGE (s)-[:HAS_EVENT {weight:1}]->(e)" \
+               "MERGE (s)-[:SIMILAR {weight:{W}}]->(ls)"
+    db_graph.cypher.execute(stat, {"DT": date_time, "I": eid, "SI": next_ind, "LDT": last_event_date, "LI": last_event_id, "W": match_score})
+    return next_ind + 1
+
+
+# def link_events_and_story(db_graph, date_time, event_id, match_score, last_event_date, last_event_id):
+#     stat = "MATCH (s:Story)-[:HAS_EVENT {weight:{W}}]->(le:Event {date_time:{LDT}, eid:{LE}}), (e:Event {date_time:{DT}, eid:{I}})" \
+#            "MERGE (s)-[r:HAS_EVENT]->(e) MERGE (le)-[:NEXT_EVENT {weight:{W}}]->(e) SET s.end_date = {DT}"
+#     db_graph.cypher.execute(stat, {"DT": date_time, "I": event_id, "SI": story_local_index, "LDT": last_event_date, "LE": last_event_id, "W": match_score})
+
+
+def link_events_and_event(db_graph, date_time, event_id, match_score, last_event_date, last_event_id):
+    stat = "MATCH (s:Story)-[:HAS_EVENT]->(le:Event {date_time:{LDT}, eid:{LI}}), (e:Event {date_time:{DT}, eid:{I}})" \
+           "MERGE (le)-[:NEXT_EVENT {weight:{W}}]->(e) SET s.end_date = {DT}"
+    db_graph.cypher.execute(stat, {"DT": date_time, "I": event_id, "LDT": last_event_date, "LI": last_event_id, "W": match_score})
 
 
 def match_story(existing, match_target):
@@ -175,3 +200,64 @@ def match_story_by_sen_edge(Gs, stories, target, tau):
 def match_story_by_doc_edge(Gd, db_graph, stories, target, day_index, sim_tau):
     edge_distance(Gd, db_graph, stories, target, day_index, sim_tau)
 
+def match_story_by_event_comp(Gd, db_graph, global_sto_ind, all_res, date_dict, sim_tau, decay_lambda, stories):
+    existing = []
+    time_decay = []
+    index_pair = []
+    # serialize former events
+    for i in (range(len(all_res)-1)):
+        for j in range(len(all_res[i]['keywords_set'])):
+            index_pair.append((i, j))
+            existing.append(all_res[i]['keywords_set'][j])
+            decay = math.exp((-1) * decay_lambda * ((len(all_res) - 1 - i) / len(all_res)))
+            time_decay.append(decay)
+
+    target = all_res[-1]
+    match_target = copy.deepcopy(target['keywords_set'])
+    node_cos = cos_sim(existing, match_target)
+
+    # compute edge similarity
+    subgs_tar = []
+    for i in range(len(match_target)):
+        sg = nx.subgraph(Gd, match_target[i])
+        if sg.number_of_nodes():
+            set_keywords_prop(db_graph, sg.nodes(), date_dict[-1], i)
+        subgs_tar.append(sg)
+    subgs_exs = []
+    for sto in existing:
+        subgs_exs.append(nx.subgraph(Gd, sto))
+
+    for i in range(len(subgs_tar)):
+        matching_graph = subgs_tar[i]
+        if matching_graph.number_of_nodes() == 0:
+            continue
+        edge_dis = []
+        for j in range(len(subgs_exs)):
+            cand = subgs_exs[j]
+            edge_val = compute_distance(matching_graph, cand)
+            edge_dis.append(edge_val)
+        node_val = node_cos[i]
+        total = edge_dis * node_val * time_decay
+        match_ind_top = total[0].argsort()[-3:][::-1]
+        match_score_top = total[0][match_ind_top]
+
+        for w in range(len(match_ind_top)):
+            match_score = match_score_top[w]
+            match_ind = match_ind_top[w]
+            print match_ind, match_score
+            matched_event = index_pair[match_ind]
+
+            if match_score < sim_tau and w > 0:
+                break
+            if match_score < np.float64(sim_tau) and w == 0:
+                global_sto_ind = create_one_story_node(db_graph, date_dict[-1], i, global_sto_ind, match_score, date_dict[matched_event[0]], matched_event[1])
+                # stories['keywords_set'].append({date_dict[-1]: target['keywords_set'][i]})
+                # stories['doc_set'].append({date_dict[-1]: target['doc_set'][i]})
+                break
+
+            if match_score >= sim_tau:
+                link_events_and_event(db_graph, date_dict[-1], i, match_score, date_dict[matched_event[0]], matched_event[1])
+                # stories['keywords_set'][match_ind][date_dict[-1]] = match_target[i]
+                # stories['doc_set'][match_ind][date_dict[-1]] = target['doc_set'][i]
+
+    return global_sto_ind
