@@ -32,4 +32,8 @@ On working...
 * global
   - data size
   - **speed**
+<<<<<<< HEAD
   - **perfomance measure**
+=======
+  - **perfomance measure**
+>>>>>>> 3303f609496519d3aca0b9675a21a95d2b9601f4
