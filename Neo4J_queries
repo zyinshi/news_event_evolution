@@ -1,0 +1,72 @@
+====== Pre-Process Database ========
+0. set index: 
+CREATE INDEX ON
+result:
+Indexes
+  ON :CValueDocumentNode(documentId)   ONLINE  
+  ON :CValueDocumentNode(text)         ONLINE  
+  ON :Document(sourceUrl)              ONLINE  
+  ON :Document(dateTime)               ONLINE  
+  ON :Event(date_time)                 ONLINE  
+  ON :NameEntityPhraseNode(sentenceId) ONLINE  
+  ON :NameEntityPhraseNode(phrase)     ONLINE  
+  ON :NameEntityPhraseNode(documentId) ONLINE  
+
+1. set property "SOURCEURL"
+match (m:META)-[]-(:HEAD)-[]-(:HTML)-[]-()-[:RELATED_DOCUMENT]-(d:Document)
+where m.name = 'SOURCEURL'
+set d.sourceUrl = m.content
+
+2. link Document with doc-level Named Entities
+MATCH (d:`Document`) 
+with d, id(d) as did
+match (n:NameEntityPhraseNode)
+where n.documentId = did
+create (d)-[:HAS_NAMEENTITY]->(n)
+
+3. link Sentence with sentence-level Named Entities
+MATCH (d:Document)-[:HAS_SENTENCE]->(s:`Sentence`)
+where toInt(d.dateTime)<20150501 and 20150400<toInt(d.dateTime)
+with d,s,id(s) as sid
+match (n:NameEntityPhraseNode)                                
+where n.sentenceId = sid
+create (s)-[:HAS_NAMEENTITY]->(n);
+
+3. link Document with C-Value terms
+MATCH (d:`Document`) 
+with d, id(d) as did
+match (n:CValueDocumentNode)
+where n.documentId = did
+create (d)-[:HAS_CVALUETERM]->(n)
+
+
+========= Export Data of Interest ===========
+4. Example: export doc-level Co-occurence relationship from all documents on day 20150401:
+
+import-cypher -d , -o /Users/zys/project/testDoc_dup_20150401.csv MATCH (n1:NameEntityPhraseNode)<-[:HAS_NAMEENTITY]-(d:Document)-[:HAS_NAMEENTITY]->(n2:NameEntityPhraseNode) where n1.phrase<>n2.phrase and d.dateTime = '20150401' and n1.neType in ['PERSON','ORGANIZATION','LOCATION'] and n2.neType in ['PERSON','ORGANIZATION','LOCATION'] and length(n1.phrase)>3 and length(n2.phrase)>3 return id(d) as docid, n1.phrase as name1, n2.phrase as name2, count(d) as weight
+
+result (first 3 lines): 
+"docid","name1","name2","weight"
+"1041104","Guevara 's","Hanson County State 's","3"
+"1106119","`` Top Chef Boston '' contestant","Melissa King","4"
+"931243","Anacortes , WA","Seattle , WA","1"
+...
+
+5. Example: export sentence-level Co-occurence relationship from all documents on day 20150401:
+import-cypher -d , -o /Users/zys/project/Sen_dup_20150401.csv MATCH (d:Document)-[:HAS_SENTENCE]->(s:`Sentence`) where d.dateTime = '20150401' with d,s match (n1:NameEntityPhraseNode)<-[:HAS_NAMEENTITY]-(s:`Sentence`)-[:HAS_NAMEENTITY]->(n2:NameEntityPhraseNode) where n1.phrase<>n2.phrase and n1.neType in ['PERSON','ORGANIZATION','LOCATION'] and n2.neType in ['PERSON','ORGANIZATION','LOCATION'] and  length(n1.phrase)>3 and length(n2.phrase)>3 return id(d), n1.phrase as name1, n2.phrase as name2, count(s) as weight
+
+result :
+"id(d)","name1","name2","weight"
+"321567","Beijing","Washington","1"
+"394367","Chicken and Egg","Minnesota","1"
+"466976","the Arkansas Municipal League","Cook","1"
+...
+
+6. Example: doc - CValue frequency
+import-cypher -d , -o /Users/zys/project/cv_doc_.csv MATCH (d:Document)-[:HAS_CVALUETERM]->(n:CValueDocumentNode) where where d.dateTime = '20150401' and length(n.text)>3 return id(d) as docid,  n.text as cvterm , n.frequency as freq order by docid, cvterm
+
+result:
+"docid","cvterm","freq"
+"806132","35-year-old cartoonist","1"
+"806132","cartoonist award","1"
+"806132","challenging market","1"

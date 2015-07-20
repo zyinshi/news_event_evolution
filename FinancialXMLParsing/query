@@ -1,0 +1,3 @@
+match (d: Document) return distinct d.dateTime, count(d);
+
+import-cypher -d , -o /Users/zys/project/test2.csv match (d:Document)-[:HAS_NAMEENTITY]->(a:NameEntityPhraseNode) where d.dateTime='20150401'and a.neType in ['PERSON','ORGANIZATION','LOCATION'] and length(a.phrase)>3 with a,d match (a)-[r1:SAME_SENTENCE]->(b:NameEntityPhraseNode), (a)<-[r2:SAME_SENTENCE]-(b:NameEntityPhraseNode) where a.phrase<>b.phrase and b.neType in ['PERSON','ORGANIZATION','LOCATION'] and length(b.phrase)>3 return a.phrase as name1, b.phrase as name2, count(distinct r1) as weight

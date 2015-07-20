@@ -1,0 +1,210 @@
+/* adder.jj Adding up numbers */
+options {
+	STATIC = false;
+	LOOKAHEAD = 3;
+}
+
+PARSER_BEGIN(QueryParser)
+
+package edu.ucsd.grammar;
+
+import edu.ucsd.grammar.ForClause;
+import edu.ucsd.grammar.ForClauseType;
+import edu.ucsd.grammar.ReturnClause;
+import edu.ucsd.grammar.WhereClause;
+import edu.ucsd.grammar.WhereClauseType;
+
+	public class QueryParser {
+		public static void main(String[] args) 
+		throws ParseException, TokenMgrError {
+			QueryParser queryParser = new QueryParser( System.in );
+			queryParser.parse(); } 
+	}
+	
+PARSER_END(QueryParser)
+
+/* Lexical Analyzer */
+SKIP : { " " }
+SKIP : { "\n" | "\r" | "\r\n" }
+
+TOKEN : { < KWFOR : "for" > }
+TOKEN : { < KWWHERE : "where" > }
+TOKEN : { < KWRETURN : "return" > }
+TOKEN : { < #LETTER : ["a"-"z", "A"-"Z"] > } 
+TOKEN : { < #DIGIT : (["0"-"9"])+ > }
+TOKEN : { < WORD_CONTEXT : "'"("Person" | "Organization")"'" > }
+TOKEN : { < WORD : "'"(["a"-"z", "A"-"Z", "0"-"9", "_"])+"'" > }
+/* The Identifier Types have to appear before the more generic Identifier
+   otherwise it will match Identifier first before Identifier Types 
+   so more specific ones have to appear first */
+TOKEN : { < DOC_AND_SENTENCE_FUNCTION : "."("contains") > }
+TOKEN : { < FUNCTION : ("shortest_phrase_starting_with" | "longest_phrase_containing")  > }
+TOKEN : { < WHERE_CLAUSE_CONNECTOR : ( "or" | "and" ) > }
+TOKEN : { < NOT : "not" > }
+TOKEN : { < IDENTIFIER_TYPES : ("Word" | "Sentence" | "Document") > }
+TOKEN : { < IDENTIFIER : (<LETTER> | "_") (<LETTER> | <DIGIT> | "_")* > }
+TOKEN : { < IDENTIFIER_TYPE_SEPARATOR : ":" > }
+TOKEN : { < VARIABLE_ASSIGNMENT : "=" > }
+TOKEN : { < OPEN_PAR : "(" > }
+TOKEN : { < CLOSE_PAR : ")" > }
+TOKEN : { < CLAUSE_SEPARATOR : "," > }
+/* TOKEN : { < VAR_TYPE_DECLARATION : (<IDENTIFIER> ":" ("Word" | "Sentence" | "Document" > ) } */
+
+/* Parser */
+ParsedQuery parse() :
+{
+	ForClause forClause;
+	WhereClause whereClause;
+	ReturnClause returnClause;	
+}
+{
+	forClause = FOR_CLAUSE()
+	whereClause = WHERE_CLAUSE()
+	returnClause = RETURN_CLAUSE()
+
+	{ return new ParsedQuery(forClause, whereClause, returnClause); } 
+}
+
+ForClause FOR_CLAUSE() :
+{
+	ForClause forClause = new ForClause();
+}
+{
+	<KWFOR>
+	/* The "(" and ")" are necessary otherwise early exit */
+	(IDENTIFIER_TYPE_DECLARATION(forClause) | VARIABLE_ASSIGNMENT(forClause))
+	( 
+		<CLAUSE_SEPARATOR>
+		(IDENTIFIER_TYPE_DECLARATION(forClause) | VARIABLE_ASSIGNMENT(forClause))
+	)*
+
+	{ return forClause; }
+}
+
+WhereClause WHERE_CLAUSE() :
+{
+	WhereClause whereClause = new WhereClause();
+}
+{
+	<KWWHERE>
+	WORD_CONSTRAINT(whereClause)
+	(<WHERE_CLAUSE_CONNECTOR>
+	 (WORD_CONSTRAINT(whereClause) | CONTAINS_CONSTRAINT(whereClause))
+	)*
+
+	{ return whereClause; }
+}
+
+ReturnClause RETURN_CLAUSE() :
+{
+	Token t;
+}
+{
+	<KWRETURN>
+	(t = <IDENTIFIER>)
+	{ return new ReturnClause(t.image); }
+}
+
+void IDENTIFIER_TYPE_DECLARATION(ForClause forClause) :
+{
+	Token t;
+	String variableName;
+	String variableType;
+}
+{	
+	(t = <IDENTIFIER>)
+	{ variableName = t.image; }
+	<IDENTIFIER_TYPE_SEPARATOR>
+	(t = <IDENTIFIER_TYPES>)
+	{ 
+         variableType = t.image; 
+	  	 forClause.addClauseType(new VariableDeclaration(variableName, variableType)); 
+	}
+}
+
+void VARIABLE_ASSIGNMENT(ForClause forClause) :
+{
+	Token t;
+	String variableName;
+	String functionName;
+	String argument;
+}
+{
+	(t = <IDENTIFIER>)
+	{ variableName = t.image; }
+	<VARIABLE_ASSIGNMENT>
+	(t = <FUNCTION>)
+	{ functionName = t.image; }
+	<OPEN_PAR>
+	(t = <IDENTIFIER>)
+        { argument = t.image; }
+	<CLOSE_PAR>
+	{ forClause.addClauseType(new VariableAssignment(variableName, functionName, argument)); }
+}
+
+void WORD_CONSTRAINT(WhereClause whereClause) : 
+{
+	Token t;
+	String variableName = null;
+	String variableValue;
+}
+{
+	(t = <IDENTIFIER>)
+	{ variableName = t.image; }
+	<VARIABLE_ASSIGNMENT>
+	(WORD_ONLY(whereClause, variableName) | WORD_WITH_CONTEXT(whereClause, variableName))	
+}
+
+void WORD_ONLY(WhereClause whereClause, String variableName) :
+{
+	Token t;
+	String variableValue;
+}
+{
+	(t = <WORD>)
+	{ 
+		variableValue = t.image;
+		whereClause.addClauseType(new WordConstraint(variableName, variableValue));
+	} 
+}
+
+void WORD_WITH_CONTEXT(WhereClause whereClause, String variableName) :
+{
+	Token t;
+	String variableValue;
+	String variableContext;
+}
+{
+	<OPEN_PAR>
+	(t = <WORD>)
+	{ 
+		variableValue = t.image;
+	}
+	<CLAUSE_SEPARATOR>
+	(t = <WORD_CONTEXT>)
+	{
+		variableContext = t.image;
+		whereClause.addClauseType(new WordConstraint(variableName, variableValue, variableContext));
+	}
+	<CLOSE_PAR> 
+}
+
+void CONTAINS_CONSTRAINT(WhereClause whereClause) :
+{
+	Token t;
+	String identifier;
+	String function;
+	String parameter;
+}
+{
+	(t = <IDENTIFIER>)
+	{ identifier = t.image; }
+	(t = <DOC_AND_SENTENCE_FUNCTION>)
+	{ function = t.image; }
+	<OPEN_PAR>
+	(t = <IDENTIFIER>)
+	{ parameter = t.image; }
+	<CLOSE_PAR>
+	{ whereClause.addClauseType(new ContainsConstraint(identifier, function, parameter)); }
+}
+

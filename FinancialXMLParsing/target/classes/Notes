@@ -1,0 +1,23 @@
+1. Create nodes independently, and then link them with a separate action e.g. Bookmark Node and then resolve the references once 
+   the child nodes have been processed. 
+2. Certain nodes have to be filtered out e.g.:
+   - Nodes with <Figure> tag:
+     <Figure>
+		<ImageData src="images/Annual Report Disney 2013_img_0.jpg"/>
+	 </Figure>
+	 <Figure>
+		<ImageData src="images/Annual Report Disney 2013_img_3.jpg"/>
+		<Caption>
+			<P>Robert A. Iger Chairman and Chief Executive Officer The Walt Disney Company </P>
+		</Caption>
+	 </Figure>
+   - 
+   
+3. Tags to be investigated. <Part>, <Sect>, <L>, 
+
+4. There are free flowing <P> tags and there are <P> tags within another tag.  
+
+Data Model:
+1. Next relationship between child nodes on the same level.
+2. Need to keep track of the paragraph and sentence numbers globally.
+3. 

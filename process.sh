@@ -1,6 +1,9 @@
+#!/usr/bin/env bash
 timeday=$1
-# cd "/Users/zys/projects/DynamicData/article"
-cd "/home/ysz/news_graph/article"
+#ARTICLE="/home/ysz/news_graph/article"
+ARTICLE="/Users/zys/project/article"
+IMPORTTOOL="/home/ysz/FinancialXMLParsing"
+cd $ARTICLE
 cd $timeday
 for file in *.html
 do
@@ -14,7 +17,6 @@ done
 # rm *.html
 
 echo "import by FinancialXMLParser: " $timeday
-# cd "/Users/zys/projects/DynamicData/FinancialXMLParsing"
-cd "/home/ysz/FinancialXMLParsing"
+cd $IMPORTTOOL
 mvn -Dmaven.test.skip=true package 
 mvn exec:java -Dexec.mainClass="edu.ucsd.xmlparser.ParserMain" -Dexec.args=$timeday

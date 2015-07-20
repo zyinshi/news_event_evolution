@@ -1,0 +1,4 @@
+mvn org.apache.maven.plugins:maven-install-plugin:2.5.2:install-file -Dfile=lexAccess2011dist.jar -DgroupId=simplenlg -DartifactId=lexAccess -Dversion=4.4 -Dpackaging=jar
+mvn org.apache.maven.plugins:maven-install-plugin:2.5.2:install-file -Dfile=lexCheck2006api.jar -DgroupId=simplenlg -DartifactId=lexCheck -Dversion=4.4 -Dpackaging=jar 
+mvn org.apache.maven.plugins:maven-install-plugin:2.5.2:install-file -Dfile=lvg2011api.jar -DgroupId=simplenlg -DartifactId=lvg2011 -Dversion=4.4 -Dpackaging=jar
+mvn org.apache.maven.plugins:maven-install-plugin:2.5.2:install-file -Dfile=simplenlg-v4.4.2.jar -DgroupId=simplenlg -DartifactId=simplenlg -Dversion=4.4.2 -Dpackaging=jar

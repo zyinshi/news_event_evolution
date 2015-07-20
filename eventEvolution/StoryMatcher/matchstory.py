@@ -6,8 +6,6 @@ import copy
 from EventUtil.util import cos_sim
 from itertools import chain
 import math
-# import bottleneck as bn
-import py2neo as pn
 
 
 def create_initial_story_nodes(current_window_Gd, db_graph, init_stories, date_time, global_index):

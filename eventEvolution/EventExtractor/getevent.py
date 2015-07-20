@@ -29,6 +29,7 @@ def query_related_text(db_graph, node, target):
     return sentences1, sentences2
 
 
+# Refine Equivalent edges by similarity between expression(sentences) surrounding two entities
 def sentense_sim(sentencelist1, sentencelist2, phrase1, phrase2):
     stemmer = nltk.stem.porter.PorterStemmer()
     token_dict = {}
@@ -82,9 +83,9 @@ def refine_cluster(c, orig, tau, db_graph):
             if target != node and ph == target[1]:
                 if not orig.has_edge(node, target):
                     continue
+                # Refine Equivalent edges by similarity between expression(sentences) surrounding two entities
                 sentences1, sentences2 = query_related_text(db_graph, node, target)
                 sen_sim = sentense_sim(sentences1, sentences2, node[1], target[1])
-                # print node, target, sen_sim
 
                 if sen_sim <= tau:
                     print "removed: ", node, target
@@ -93,8 +94,6 @@ def refine_cluster(c, orig, tau, db_graph):
 
 def refine_sub_cluster(c, db_graph, tau):
     nodes = c.nodes()
-    # print c.number_of_nodes()
-#     tfidf = TfidfVectorizer(tokenizer=tokenize, stop_words='english')
     for i in range(len(nodes)):
         node = nodes[i]
         doc_id, ph = node[0], node[1]
@@ -112,6 +111,7 @@ def refine_sub_cluster(c, db_graph, tau):
                     c.remove_edge(node, target)
 
 
+# Iterative Louvain Method with Cluter Refine
 def get_partition(G, db_graph, tau):
     iter = 0
     oldmod = 0
@@ -141,7 +141,7 @@ def get_partition(G, db_graph, tau):
     return result
 
 
-
+# To improve speed: use connected component for cluster refining
 def get_partition_by_cc(G, db_graph, tau):
     start = time.time()
     partition = community.best_partition(G)
@@ -178,11 +178,10 @@ def get_partition_by_cc(G, db_graph, tau):
     return newRes
 
 
+# Update Database
 def create_event_nodes(db_graph, best_par, doc_list, date_time):
     tx = db_graph.cypher.begin()
     for i in range(len(best_par)):
-        # event = pn.Node("Event", date_time=date_time, eid=i)
-        # db_graph.create(event)
         doc_statement = "MERGE (e:Event {date_time:{DT}, eid:{I}}) with e " \
                         "MATCH (d:Document) WHERE id(d)={DID}" \
                         "MERGE (e)-[r:CONTAIN_DOC]->(d)"

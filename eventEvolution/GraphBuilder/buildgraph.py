@@ -13,7 +13,8 @@ from EventUtil.util import compute_jaccard_sim
 
 
 
-# alpha, weight of sentence level co-occurance; beta: weight of equivalent term
+# alpha, weight of sentence level co-occurance
+# beta: weight of equivalent term
 def load_graph(docFile, senFile, alpha, beta, cvterm):
     Gd = nx.Graph()
     nuissians = "Associated Press"
@@ -33,7 +34,7 @@ def load_graph(docFile, senFile, alpha, beta, cvterm):
         for l in fi:
             if not l[1][0].isalnum() or not l[2][0].isalnum() or nuissians in l[1] or nuissians in l[2]: continue
             Gd[(l[0], l[1].lower())][(l[0], l[2].lower())]['weight'] += alpha * float(l[3]) / 2
-            # Gd[(l[0],l[1])][(l[0],l[2])]['weight'] *= (float(l[3])+1) #if sen co, heavier weight for that edge (x 1.)
+            # Gd[(l[0],l[1])][(l[0],l[2])]['weight'] *= (float(l[3])+1) # heavier weight for sen-level cooccurrence edge
 
     add_equivalent(Gd, beta, cvterm)
     return Gd
@@ -55,10 +56,12 @@ def add_equivalent(Gd, beta, cvterm):
                     Gd.add_edge(node,target, weight=beta * jacSim[(docid, target_docid)])
 
 
+# # pure keyword network (unique node, no equivalent edge) - used for evolution detection phase
+# alpha, weight of sentence level co-occurance
+# noise_tau, noise_edge_tau, weight_tau: threshold for pruning
 def load_doc_graph(local_files, alpha, noise_tau, noise_edge_tau, weight_tau):
     Gd = nx.Graph()
     term_freq = defaultdict(set)
-#     term_itidf = defaultdict()
 
     for i in range(len(local_files)):
         dup_doc_files = local_files[i][0]
@@ -74,10 +77,7 @@ def load_doc_graph(local_files, alpha, noise_tau, noise_edge_tau, weight_tau):
                 if Gd.has_edge(l[1].lower(), l[2].lower()):
                     Gd[l[1].lower()][l[2].lower()]['weight'] += 1
                 else:
-#                     Gd.add_edge(l[1].lower(), l[2].lower(), weight=float(l[3])/2)  # a,b and b,a
                     Gd.add_edge(l[1].lower(), l[2].lower(), weight=1)
-#                 term_itidf[l[1].lower()] += float(l[3])
-#                 term_itidf[l[2].lower()] += float(l[3])
                 term_freq[l[1].lower()].add(l[0])
                 term_freq[l[2].lower()].add(l[0])
 
@@ -89,12 +89,13 @@ def load_doc_graph(local_files, alpha, noise_tau, noise_edge_tau, weight_tau):
                     continue
                 # Gd[l[1]][l[2]]['weight'] += alpha * float(l[3])
                 Gd[l[1].lower()][l[2].lower()]['weight'] += alpha * float(l[3])/2
+
     # compute edge weight
     # w = d_ab * s_ab / (d_a * d_b)
-    noises = set(k for k, v in term_freq.iteritems() if len(v) < noise_tau) # prune
+    noises = set(k for k, v in term_freq.iteritems() if len(v) < noise_tau)     # prune out nodes with low frequency
     Gd.remove_nodes_from(noises)
-    for e in Gd.edges(data=True):
-#         print e[2]['weight']
+
+    for e in Gd.edges(data=True):       # prune out edges with low frequency
         if e[2]['weight'] < noise_edge_tau:
             Gd.remove_edge(e[0], e[1])
     small_deg = [node for node, degree in Gd.degree().items() if degree < 3]
@@ -102,48 +103,12 @@ def load_doc_graph(local_files, alpha, noise_tau, noise_edge_tau, weight_tau):
 
     for u, v, d in Gd.edges(data=True):
         d['weight'] = float(d['weight']) / (len(term_freq[u]) * len(term_freq[v]))
-#         print u,v,d
-#         print d['weight']
         if d['weight'] < weight_tau:
             Gd.remove_edge(u, v)
     return Gd
 
 
-def load_sen_graph(sen_file):
-    Gd = nx.Graph()
-    with open(sen_file, 'rb') as inf:
-        next(inf, '')
-        fi = csv.reader(inf, skipinitialspace=True)
-        for l in fi:
-            if not l[1][0].isalnum() or not l[2][0].isalnum():
-                continue
-            Gd.add_node(l[1])
-            Gd.add_node(l[2])
-            Gd.add_edge(l[1], l[2], weight=float(l[3]))
-
-    return Gd
-
-
-def load_cv_graph(cv_file, beta):
-    G = nx.Graph()
-    with open(cv_file, 'rb') as inf:
-        next(inf, '')
-        fi = csv.reader(inf, skipinitialspace=True)
-        for l in fi:
-            if l[1][:4] == 'year' or l[1][:4] == 'week': continue
-            if l[2][:4] == 'year' or l[2][:4] == 'week': continue
-            G.add_node((l[0], l[1]))
-            G.add_node((l[0], l[2]))
-            G.add_edge((l[0], l[1]), (l[0], l[2]), weight=float(l[3]))
-
-    for node in G.nodes():
-        ph = node[1]
-        for target in G.nodes():
-            if target != node and ph == target[1]:
-                G.add_edge(node, target, weight=beta)
-    return G
-
-
+# Compute Document similarity based on cosine similarity of CValue terms vector
 def load_cv_doc(cvFile):
     cvDict = defaultdict(defaultdict)
     with open(cvFile, 'rb') as inf:
@@ -162,3 +127,40 @@ def load_cv_doc(cvFile):
     # 	docTerms.to_sparse()
     docTerms = docTerms.T.to_dict()
     return docTerms
+
+
+
+# pure sentence co-occurence network (without doc level) - discarded
+def load_sen_graph(sen_file):
+    Gd = nx.Graph()
+    with open(sen_file, 'rb') as inf:
+        next(inf, '')
+        fi = csv.reader(inf, skipinitialspace=True)
+        for l in fi:
+            if not l[1][0].isalnum() or not l[2][0].isalnum():
+                continue
+            Gd.add_node(l[1])
+            Gd.add_node(l[2])
+            Gd.add_edge(l[1], l[2], weight=float(l[3]))
+
+    return Gd
+
+# pure cvalue term co-occurence network (only on doc level) - discarded
+def load_cv_graph(cv_file, beta):
+    G = nx.Graph()
+    with open(cv_file, 'rb') as inf:
+        next(inf, '')
+        fi = csv.reader(inf, skipinitialspace=True)
+        for l in fi:
+            if l[1][:4] == 'year' or l[1][:4] == 'week': continue
+            if l[2][:4] == 'year' or l[2][:4] == 'week': continue
+            G.add_node((l[0], l[1]))
+            G.add_node((l[0], l[2]))
+            G.add_edge((l[0], l[1]), (l[0], l[2]), weight=float(l[3]))
+
+    for node in G.nodes():
+        ph = node[1]
+        for target in G.nodes():
+            if target != node and ph == target[1]:
+                G.add_edge(node, target, weight=beta)
+    return G

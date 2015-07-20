@@ -1,0 +1,7 @@
+Sample questions:
+
+Which ORGANIZATION did Disney acquire?
+How much MONEY did Marvel make?
+When did Disney acquire Marvel?
+
+Certain questions have an associated Name Entity and verb?

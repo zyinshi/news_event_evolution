@@ -1,0 +1,1 @@
+for w:Word , p = shortest_term_starting_with(w), s:Sentence where w = 'Walt' return s
