@@ -4,7 +4,7 @@ Event evolution detection based on Graph network model
 On working...
 ### Dependencies and Tools:
 * Crawl tool : https://www.readability.com/developers/api/parser
-* Tiny-html5: https://github.com/htacg/tidy-html5
+* Tidy-html5: https://github.com/htacg/tidy-html5
 * Document-graph converter: https://github.com/arz2013/FinancialXMLParsing
 * Neo4J 2.0.4
 * Louvain Method: https://sites.google.com/site/findcommunities/
