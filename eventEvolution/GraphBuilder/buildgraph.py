@@ -8,9 +8,7 @@ from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import pandas as pd
-
 from EventUtil.util import compute_jaccard_sim
-
 
 
 # alpha, weight of sentence level co-occurance
